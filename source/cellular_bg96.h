@@ -26,6 +26,7 @@
 #ifndef __CELLULAR_BG96_H__
 #define __CELLULAR_BG96_H__
 
+#include "cellular_common.h"
 /* *INDENT-OFF* */
 #ifdef __cplusplus
     extern "C" {
@@ -49,6 +50,7 @@
 #define DATA_SEND_TIMEOUT_MS                       ( 50000UL )
 #define DATA_READ_TIMEOUT_MS                       ( 50000UL )
 
+#define REQ_TIMEOUT_MS                             ( 30000UL )
 /**
  * @brief DNS query result.
  */
@@ -61,6 +63,12 @@ typedef enum cellularDnsQueryResult
 } cellularDnsQueryResult_t;
 
 typedef struct cellularModuleContext cellularModuleContext_t;
+
+typedef struct CellularSslSocket
+{
+    uint8_t sslContextId;
+    bool useSsl;
+} CellularSslSocket_t;
 
 /**
  * @brief DNS query URC callback fucntion.
@@ -84,6 +92,19 @@ typedef struct cellularModuleContext
 
 CellularPktStatus_t _Cellular_ParseSimstat( char * pInputStr,
                                             CellularSimCardState_t * pSimState );
+
+CellularError_t Cellular_ConfigureSSL(CellularHandle_t cellularHandle,
+                                      CellularSocketHandle_t socketHandle,
+                                      const char* sslConfigurationParameter,
+                                      uint32_t inputArg);
+
+CellularError_t Cellular_ConfigureSSLCACertificate(CellularHandle_t cellularHandle,
+                                      CellularSocketHandle_t socketHandle,
+                                      const char* sslConfigurationParameter,
+                                      const char* filename);
+
+void setSocketModemData(CellularSocketHandle_t pSocketData,
+                        CellularSslSocket_t modemData);
 
 extern CellularAtParseTokenMap_t CellularUrcHandlerTable[];
 extern uint32_t CellularUrcHandlerTableSize;
