@@ -2832,7 +2832,7 @@ CellularError_t Cellular_SocketSend( CellularHandle_t cellularHandle,
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%ld,%ld",
-                           (modemData->useSsl ? "AT+QSSLSEND" : "AT+QISEND="), socketHandle->socketId, atDataReqSocketSend.dataLen );
+                           (modemData->useSsl ? "AT+QSSLSEND=" : "AT+QISEND="), socketHandle->socketId, atDataReqSocketSend.dataLen );
 
 
         pktStatus = _Cellular_AtcmdDataSend( pContext, atReqSocketSend, atDataReqSocketSend,
