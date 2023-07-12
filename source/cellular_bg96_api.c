@@ -103,6 +103,10 @@
 
 #define MAX_QIRD_STRING_PREFIX_STRING            ( 14U )    /* The max data prefix string is "+QIRD: 1460\r\n" */
 
+#define SSL_DATA_PREFIX_STRING                   "+QSSLRECV:"
+#define SSL_DATA_PREFIX_STRING_LENGTH            ( 10U )
+#define MAX_QSSLRECV_STRING_PREFIX_STRING        ( 18U )    /* The max data prefix string is "+QSSLRECV: 1500\r\n" */
+
 /*-----------------------------------------------------------*/
 
 /**
@@ -200,7 +204,8 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t lineLength,
                                                  char ** ppDataStart,
-                                                 uint32_t * pDataLength );
+                                                 uint32_t * pDataLength ,
+                                                 bool useSsl);
 static CellularError_t storeAccessModeAndAddress( CellularContext_t * pContext,
                                                   CellularSocketHandle_t socketHandle,
                                                   CellularSocketAccessMode_t dataAccessMode,
@@ -219,6 +224,17 @@ static CellularPktStatus_t socketSendDataPrefix( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t * pBytesRead );
 
+static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength );
+                                                 
+static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength );
 /*-----------------------------------------------------------*/
 
 static bool _parseSignalQuality( char * pQcsqPayload,
@@ -1832,12 +1848,29 @@ static CellularPktStatus_t _Cellular_RecvFuncGetPsmSettings( CellularContext_t *
 }
 
 /*-----------------------------------------------------------*/
-
-static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
+static CellularPktStatus_t socketRecvDataPrefixSsl( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t lineLength,
                                                  char ** ppDataStart,
                                                  uint32_t * pDataLength )
+{
+    return socketRecvDataPrefix( pCallbackContext, pLine, lineLength, ppDataStart, pDataLength, true );
+}
+
+static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength )
+{
+    return socketRecvDataPrefix( pCallbackContext, pLine, lineLength, ppDataStart, pDataLength, false);
+}
+static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength,
+                                                 bool useSsl )
 {
     char * pDataStart = NULL;
     uint32_t prefixLineLength = 0U;
@@ -1845,8 +1878,9 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
     CellularATError_t atResult = CELLULAR_AT_SUCCESS;
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
     uint32_t i = 0;
-    char pLocalLine[ MAX_QIRD_STRING_PREFIX_STRING + 1 ] = "\0";
-    uint32_t localLineLength = MAX_QIRD_STRING_PREFIX_STRING > lineLength ? lineLength : MAX_QIRD_STRING_PREFIX_STRING;
+    char pLocalLine[ (useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING) + 1 ];
+    strcpy(pLocalLine, "\0"); 
+    uint32_t localLineLength = (useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING) > lineLength ? lineLength : (useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING);
 
     ( void ) pCallbackContext;
 
@@ -1857,10 +1891,10 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
     else
     {
         /* Check if the message is a data response. */
-        if( strncmp( pLine, DATA_PREFIX_STRING, DATA_PREFIX_STRING_LENGTH ) == 0 )
+        if( strncmp( pLine, (useSsl ? SSL_DATA_PREFIX_STRING : DATA_PREFIX_STRING), ((useSsl) ? SSL_DATA_PREFIX_STRING_LENGTH : DATA_PREFIX_STRING_LENGTH )) == 0 )
         {
-            strncpy( pLocalLine, pLine, MAX_QIRD_STRING_PREFIX_STRING );
-            pLocalLine[ MAX_QIRD_STRING_PREFIX_STRING ] = '\0';
+            strncpy( pLocalLine, pLine, (useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING) );
+            pLocalLine[ (useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING) ] = '\0';
             pDataStart = pLocalLine;
 
             /* Add a '\0' char at the end of the line. */
@@ -1883,7 +1917,7 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
 
         if( pDataStart != NULL )
         {
-            atResult = Cellular_ATStrtoi( &pDataStart[ DATA_PREFIX_STRING_LENGTH ], 10, &tempValue );
+            atResult = Cellular_ATStrtoi( &pDataStart[ (useSsl ? SSL_DATA_PREFIX_STRING_LENGTH : DATA_PREFIX_STRING_LENGTH) ], 10, &tempValue );
 
             if( ( atResult == CELLULAR_AT_SUCCESS ) && ( tempValue >= 0 ) &&
                 ( tempValue <= ( int32_t ) CELLULAR_MAX_RECV_DATA_LEN ) )
@@ -2731,8 +2765,14 @@ CellularError_t Cellular_SocketRecv( CellularHandle_t cellularHandle,
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE,
                            "%s%ld,%ld", (modemData->useSsl ?  "AT+QSSLRECV=" : "AT+QIRD="), socketHandle->socketId, recvLen );
-        pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
-                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefix, NULL );
+        
+        if(modemData->useSsl){        
+            pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
+                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefixSsl, NULL );
+        }else{
+            pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
+                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefixNonSsl, NULL );
+        }
 
         if( pktStatus != CELLULAR_PKT_STATUS_OK )
         {
