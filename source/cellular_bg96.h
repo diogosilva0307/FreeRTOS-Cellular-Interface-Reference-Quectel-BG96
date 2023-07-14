@@ -106,6 +106,19 @@ CellularError_t Cellular_ConfigureSSLCACertificate(CellularHandle_t cellularHand
 void setSocketModemData(CellularSocketHandle_t pSocketData,
                         CellularSslSocket_t modemData);
 
+CellularError_t Cellular_FileDelete(CellularHandle_t cellularHandle, 
+                                    const char* filename);
+
+CellularError_t Cellular_VerifyFile(CellularHandle_t cellularHandle, 
+                                    const char* filename);
+
+CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle,
+                                    const char* filename,
+                                    uint32_t fileSize);          
+
+CellularError_t Cellular_GetSpaceInformation(CellularHandle_t cellularHandle,
+                                             const char* name_pattern);                                                              
+
 extern CellularAtParseTokenMap_t CellularUrcHandlerTable[];
 extern uint32_t CellularUrcHandlerTableSize;
 

@@ -3372,6 +3372,174 @@ CellularError_t Cellular_GetHostByName( CellularHandle_t cellularHandle,
     return cellularStatus;
 }
 
+CellularError_t Cellular_FileDelete(CellularHandle_t cellularHandle, const char* filename)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqFileDel = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Form the AT command. */
+
+        /* The return value of snprintf is not used.
+         * The max length of the string is fixed and checked offline. */
+        /* coverity[misra_c_2012_rule_21_6_violation]. */
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s", "AT+QFDEL=", filename);
+        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqFileDel, REQ_TIMEOUT_MS);
+
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_FileDelete: can't delete file, cmdBuf:%s, PktRet: %d", cmdBuf, pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
+    }
+
+    return cellularStatus;
+}
+
+CellularError_t Cellular_VerifyFile(CellularHandle_t cellularHandle, const char* filename)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqVerifyFile = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Form the AT command. */
+
+        /* The return value of snprintf is not used.
+         * The max length of the string is fixed and checked offline. */
+        /* coverity[misra_c_2012_rule_21_6_violation]. */
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s", "AT+QFLST=", filename);
+        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqVerifyFile, REQ_TIMEOUT_MS);
+
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_FileDelete: can't verify filename, cmdBuf:%s, PktRet: %d", cmdBuf, pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
+    }
+
+    return cellularStatus;
+}
+
+CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, const char* filename, uint32_t fileSize)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqUploadFile = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Form the AT command. */
+
+        /* The return value of snprintf is not used.
+         * The max length of the string is fixed and checked offline. */
+        /* coverity[misra_c_2012_rule_21_6_violation]. */
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s,%d", "AT+QFUPL=", filename);
+        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqUploadFile, REQ_TIMEOUT_MS);
+
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_UploadFile: can't upload file: %s, cmdBuf:%s, PktRet: %d", filename, cmdBuf, pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
+    }
+
+    return cellularStatus;
+}
+
+CellularError_t Cellular_GetSpaceInformation(CellularHandle_t cellularHandle, const char* name_pattern)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqGetSpaceInfo = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Form the AT command. */
+
+        /* The return value of snprintf is not used.
+         * The max length of the string is fixed and checked offline. */
+        /* coverity[misra_c_2012_rule_21_6_violation]. */
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s", "AT+QFLDS=", name_pattern);
+        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqGetSpaceInfo, REQ_TIMEOUT_MS);
+
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_FileDelete: can't verify filename, cmdBuf:%s, PktRet: %d", cmdBuf, pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
+    }
+
+    return cellularStatus;
+}
+
 /*-----------------------------------------------------------*/
 
 CellularError_t Cellular_Init( CellularHandle_t * pCellularHandle,
