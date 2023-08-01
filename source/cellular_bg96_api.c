@@ -2389,6 +2389,39 @@ static CellularPktStatus_t socketSendDataPrefix( void * pCallbackContext,
     return pktStatus;
 }
 
+static CellularPktStatus_t fileUploadInFileSystem( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t * pBytesRead )
+{
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+
+    if( ( pLine == NULL ) || ( pBytesRead == NULL ) )
+    {
+        LogError( ( "socketSendDataPrefix: pLine is invalid or pBytesRead is invalid" ) );
+        pktStatus = CELLULAR_PKT_STATUS_BAD_PARAM;
+    }
+    else if( pCallbackContext != NULL )
+    {
+        LogError( ( "socketSendDataPrefix: pCallbackContext is not NULL" ) );
+        pktStatus = CELLULAR_PKT_STATUS_BAD_PARAM;
+    }
+    else if( *pBytesRead != 2U )
+    {
+        LogDebug( ( "socketSendDataPrefix: pBytesRead %u %s is not 1", *pBytesRead, pLine ) );
+    }
+    else
+    {
+        /* After the data prefix, there should not be any data in stream.
+         * Cellular commmon processes AT command in lines. Add a '\0' after '>'. */
+        if( strcmp( pLine, "CONNECT " ) == 0 )
+        {
+            pLine[ 1 ] = '\n';
+        }
+    }
+
+    return pktStatus;
+}
+
 /*-----------------------------------------------------------*/
 
 /* FreeRTOS Cellular Library API. */
@@ -3456,11 +3489,12 @@ CellularError_t Cellular_VerifyFile(CellularHandle_t cellularHandle, const char*
     return cellularStatus;
 }
 
-CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, const char* filename, uint32_t fileSize)
+CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, const char* filename, const char* fileContent, uint32_t fileSize, uint32_t* pSentDataLength)
 {
     CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
     CellularError_t cellularStatus = CELLULAR_SUCCESS;
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    uint32_t sendTimeout = DATA_SEND_TIMEOUT_MS;
     char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
 
     CellularAtReq_t atReqUploadFile = {
@@ -3470,6 +3504,15 @@ CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, const char*
         NULL,
         NULL,
         0,
+    };
+
+    CellularAtDataReq_t atDataUploadFile =
+    {
+        fileContent,
+        fileSize,
+        pSentDataLength,
+        NULL,
+        0
     };
 
     if (cellularStatus == CELLULAR_SUCCESS)
@@ -3485,9 +3528,12 @@ CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, const char*
         /* The return value of snprintf is not used.
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
-        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s,%d", "AT+QFUPL=", filename);
-        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqUploadFile, REQ_TIMEOUT_MS);
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s,%d", "AT+QFUPL=", filename, fileSize);
 
+        pktStatus = _Cellular_AtcmdDataSend( pContext, atReqUploadFile, atDataUploadFile,
+                                             fileUploadInFileSystem, NULL,
+                                             PACKET_REQ_TIMEOUT_MS, sendTimeout, 0U );
+          
         if (pktStatus != CELLULAR_PKT_STATUS_OK)
         {
             LogError(("Cellular_UploadFile: can't upload file: %s, cmdBuf:%s, PktRet: %d", filename, cmdBuf, pktStatus));

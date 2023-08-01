@@ -112,9 +112,11 @@ CellularError_t Cellular_FileDelete(CellularHandle_t cellularHandle,
 CellularError_t Cellular_VerifyFile(CellularHandle_t cellularHandle, 
                                     const char* filename);
 
-CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle,
+CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, 
                                     const char* filename,
-                                    uint32_t fileSize);          
+                                    const char* fileContent,
+                                    uint32_t fileSize,
+                                    uint32_t* pSentDataLength);      
 
 CellularError_t Cellular_GetSpaceInformation(CellularHandle_t cellularHandle,
                                              const char* name_pattern);                                                              
