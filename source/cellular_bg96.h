@@ -64,12 +64,6 @@ typedef enum cellularDnsQueryResult
 
 typedef struct cellularModuleContext cellularModuleContext_t;
 
-typedef struct CellularSslSocket
-{
-    uint8_t sslContextId;
-    bool useSsl;
-} CellularSslSocket_t;
-
 /**
  * @brief DNS query URC callback fucntion.
  */
@@ -92,34 +86,6 @@ typedef struct cellularModuleContext
 
 CellularPktStatus_t _Cellular_ParseSimstat( char * pInputStr,
                                             CellularSimCardState_t * pSimState );
-
-CellularError_t Cellular_ConfigureSSL(CellularHandle_t cellularHandle,
-                                      CellularSocketHandle_t socketHandle,
-                                      const char* sslConfigurationParameter,
-                                      uint32_t inputArg);
-
-CellularError_t Cellular_ConfigureSSLCACertificate(CellularHandle_t cellularHandle,
-                                      CellularSocketHandle_t socketHandle,
-                                      const char* sslConfigurationParameter,
-                                      const char* filename);
-
-void setSocketModemData(CellularSocketHandle_t pSocketData,
-                        CellularSslSocket_t modemData);
-
-CellularError_t Cellular_FileDelete(CellularHandle_t cellularHandle, 
-                                    const char* filename);
-
-CellularError_t Cellular_VerifyFile(CellularHandle_t cellularHandle, 
-                                    const char* filename);
-
-CellularError_t Cellular_UploadFile(CellularHandle_t cellularHandle, 
-                                    const char* filename,
-                                    const char* fileContent,
-                                    uint32_t fileSize,
-                                    uint32_t* pSentDataLength);      
-
-CellularError_t Cellular_GetSpaceInformation(CellularHandle_t cellularHandle,
-                                             const char* name_pattern);                                                              
 
 extern CellularAtParseTokenMap_t CellularUrcHandlerTable[];
 extern uint32_t CellularUrcHandlerTableSize;
