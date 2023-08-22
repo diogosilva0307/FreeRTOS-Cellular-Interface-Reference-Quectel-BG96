@@ -69,6 +69,7 @@ CellularAtParseTokenMap_t CellularUrcHandlerTable[] =
     { "PSM POWER DOWN",    _Cellular_ProcessPsmPowerDown  },
     { "QIND",              _Cellular_ProcessIndication    },
     { "QIURC",             _Cellular_ProcessSocketurc     },
+    { "QIOPEN",            _Cellular_ProcessSocketOpen    },
     { "QSIMSTAT",          _Cellular_ProcessSimstat       },
     { "QSSLOPEN",          _Cellular_ProcessSocketOpen    },
     { "QSSLURC",           _Cellular_ProcessSocketurc     },
