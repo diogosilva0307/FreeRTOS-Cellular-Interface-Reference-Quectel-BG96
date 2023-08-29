@@ -1812,7 +1812,7 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
     uint32_t i = 0;
     uint8_t commandPrefixStringLength = useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING;
     uint8_t sslDataPrefixStringLength = useSsl ? SSL_DATA_PREFIX_STRING_LENGTH : DATA_PREFIX_STRING_LENGTH;
-    char pLocalLine[ prefixStringLength + 1 ];
+    char pLocalLine[ commandPrefixStringLength + 1 ];
     strcpy(pLocalLine, "\0"); 
     uint32_t localLineLength = commandPrefixStringLength > lineLength ? lineLength : commandPrefixStringLength;
 
@@ -1827,8 +1827,8 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
         /* Check if the message is a data response. */
         if( strncmp( pLine, (useSsl ? SSL_DATA_PREFIX_STRING : DATA_PREFIX_STRING), sslDataPrefixStringLength) == 0 )
         {
-            strncpy( pLocalLine, pLine, prefixStringLength );
-            pLocalLine[ prefixStringLength ] = '\0';
+            strncpy( pLocalLine, pLine, commandPrefixStringLength );
+            pLocalLine[ commandPrefixStringLength ] = '\0';
             pDataStart = pLocalLine;
 
             /* Add a '\0' char at the end of the line. */
