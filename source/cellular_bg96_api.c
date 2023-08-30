@@ -2324,24 +2324,19 @@ static CellularPktStatus_t socketSendDataPrefix( void * pCallbackContext,
 }
 
 static CellularPktStatus_t fileUploadInFileSystem( void * pCallbackContext,
-                                                 char * pLine,
-                                                 uint32_t * pBytesRead )
+                                                   char * pLine,
+                                                   uint32_t * pBytesRead )
 {
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
-
-    if( ( pLine == NULL ) || ( pBytesRead == NULL ) )
+    if( ( pLine == NULL ) || ( pBytesRead == NULL )  || ( pCallbackContext != NULL ) )
     {
-        LogError( ( "socketSendDataPrefix: pLine is invalid or pBytesRead is invalid" ) );
+        LogError( ( "fileUploadInFileSystem: NULL parameter" ) );
         pktStatus = CELLULAR_PKT_STATUS_BAD_PARAM;
     }
-    else if( pCallbackContext != NULL )
+    else if( *pBytesRead != 9U )
     {
-        LogError( ( "socketSendDataPrefix: pCallbackContext is not NULL" ) );
-        pktStatus = CELLULAR_PKT_STATUS_BAD_PARAM;
-    }
-    else if( *pBytesRead != 2U )
-    {
-        LogDebug( ( "socketSendDataPrefix: pBytesRead %u %s is not 1", *pBytesRead, pLine ) );
+        LogError( ( "fileUploadInFileSystem: pBytesRead %u %s is not 8", *pBytesRead, pLine ) );
+        pktStatus = CELLULAR_PKT_STATUS_INVALID_DATA;
     }
     else
     {
