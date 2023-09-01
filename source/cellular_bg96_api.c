@@ -1266,7 +1266,7 @@ CellularError_t Cellular_ConfigureSSLContext(CellularHandle_t cellularHandle,
     CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
     CellularError_t cellularStatus = CELLULAR_SUCCESS;
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
-    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+    char cmdBuf[CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE] = {'\0'};
 
     CellularAtReq_t atReqConfSSL = {
         cmdBuf,
