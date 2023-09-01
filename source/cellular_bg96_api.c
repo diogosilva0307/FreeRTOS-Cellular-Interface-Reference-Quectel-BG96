@@ -43,6 +43,8 @@
 /*-----------------------------------------------------------*/
 
 #define CELLULAR_AT_CMD_TYPICAL_MAX_SIZE           ( 32U )
+#define CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE        ( 64U )
+
 #define CELLULAR_AT_CMD_QUERY_DNS_MAX_SIZE         ( 280U )
 
 #define SIGNAL_QUALITY_POS_SYSMODE                 ( 1U )
@@ -102,6 +104,10 @@
 #define DATA_PREFIX_STRING_CHANGELINE_LENGTH     ( 2U )     /* The length of the change line "\r\n". */
 
 #define MAX_QIRD_STRING_PREFIX_STRING            ( 14U )    /* The max data prefix string is "+QIRD: 1460\r\n" */
+
+#define SSL_DATA_PREFIX_STRING                   "+QSSLRECV:"
+#define SSL_DATA_PREFIX_STRING_LENGTH            ( 10U )
+#define MAX_QSSLRECV_STRING_PREFIX_STRING        ( 18U )    /* The max data prefix string is "+QSSLRECV: 1500\r\n" */
 
 /*-----------------------------------------------------------*/
 
@@ -200,7 +206,8 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t lineLength,
                                                  char ** ppDataStart,
-                                                 uint32_t * pDataLength );
+                                                 uint32_t * pDataLength,
+                                                 bool useSsl);
 static CellularError_t storeAccessModeAndAddress( CellularContext_t * pContext,
                                                   CellularSocketHandle_t socketHandle,
                                                   CellularSocketAccessMode_t dataAccessMode,
@@ -219,6 +226,12 @@ static CellularPktStatus_t socketSendDataPrefix( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t * pBytesRead );
 
+static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength );
+                                                 
 /*-----------------------------------------------------------*/
 
 static bool _parseSignalQuality( char * pQcsqPayload,
@@ -1193,39 +1206,103 @@ static CellularError_t buildSocketConnect( CellularSocketHandle_t socketHandle,
 {
     CellularError_t cellularStatus = CELLULAR_SUCCESS;
     char protocol[ 15 ];
-
+ 
     if( pCmdBuf == NULL )
     {
         LogError( ( "buildSocketConnect: Invalid command buffer" ) );
         cellularStatus = CELLULAR_BAD_PARAMETER;
     }
-
-    if( cellularStatus == CELLULAR_SUCCESS )
+    
+    if(socketHandle->sslConfig.useSsl == 1)
     {
-        if( socketHandle->socketProtocol == CELLULAR_SOCKET_PROTOCOL_TCP )
+        ( void ) snprintf( pCmdBuf, CELLULAR_AT_CMD_MAX_SIZE,
+                    "%s%d,%d,%ld,\"%s\",%d,%d",
+                    "AT+QSSLOPEN=",
+                    socketHandle->contextId,
+                    socketHandle->sslConfig.sslContextId,
+                    socketHandle->socketId,
+                    socketHandle->remoteSocketAddress.ipAddress.ipAddress,
+                    socketHandle->remoteSocketAddress.port,
+                    socketHandle->dataMode ); 
+    }
+    else
+    {
+        if( cellularStatus == CELLULAR_SUCCESS )
         {
-            ( void ) strcpy( protocol, "TCP" );
-        }
-        else
-        {
-            ( void ) strcpy( protocol, "UDP SERVICE" );
-        }
+            if( socketHandle->socketProtocol == CELLULAR_SOCKET_PROTOCOL_TCP )
+            {
+                ( void ) strcpy( protocol, "TCP" );
+            }
+            else
+            {
+                ( void ) strcpy( protocol, "UDP SERVICE" );
+            }
 
+            /* Form the AT command. */
+
+            /* The return value of snprintf is not used.
+            * The max length of the string is fixed and checked offline. */
+            /* coverity[misra_c_2012_rule_21_6_violation]. */
+            ( void ) snprintf( pCmdBuf, CELLULAR_AT_CMD_MAX_SIZE,
+                            "%s%d,%ld,\"%s\",\"%s\",%d,%d,%d",
+                            "AT+QIOPEN=",
+                            socketHandle->contextId,
+                            socketHandle->socketId,
+                            protocol,
+                            socketHandle->remoteSocketAddress.ipAddress.ipAddress,
+                            socketHandle->remoteSocketAddress.port,
+                            socketHandle->localPort,
+                            socketHandle->dataMode );
+        }
+    }
+    return cellularStatus;
+}
+
+CellularError_t Cellular_ConfigureSSLContext(CellularHandle_t cellularHandle,
+                                      uint8_t sslContextId,
+                                      const char* sslConfigurationParameter,
+                                      const char* inputArg)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    char cmdBuf[CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqConfSSL = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
         /* Form the AT command. */
 
         /* The return value of snprintf is not used.
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
-        ( void ) snprintf( pCmdBuf, CELLULAR_AT_CMD_MAX_SIZE,
-                           "%s%d,%ld,\"%s\",\"%s\",%d,%d,%d",
-                           "AT+QIOPEN=",
-                           socketHandle->contextId,
-                           socketHandle->socketId,
-                           protocol,
-                           socketHandle->remoteSocketAddress.ipAddress.ipAddress,
-                           socketHandle->remoteSocketAddress.port,
-                           socketHandle->localPort,
-                           socketHandle->dataMode );
+        (void)snprintf(
+            cmdBuf, CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE, "%s\"%s\",%d,%s", "AT+QSSLCFG=", sslConfigurationParameter, sslContextId, inputArg);
+        pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqConfSSL, REQ_TIMEOUT_MS);
+              
+
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_ConfigureSSL: can't configure SSL %s parameter, cmdBuf:%s, PktRet: %d",
+                      sslConfigurationParameter,
+                      cmdBuf,
+                      pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
     }
 
     return cellularStatus;
@@ -1700,12 +1777,29 @@ static CellularPktStatus_t _Cellular_RecvFuncGetPsmSettings( CellularContext_t *
 }
 
 /*-----------------------------------------------------------*/
-
-static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
+static CellularPktStatus_t socketRecvDataPrefixSsl( void * pCallbackContext,
                                                  char * pLine,
                                                  uint32_t lineLength,
                                                  char ** ppDataStart,
                                                  uint32_t * pDataLength )
+{
+    return socketRecvDataPrefix( pCallbackContext, pLine, lineLength, ppDataStart, pDataLength, true );
+}
+
+static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength )
+{
+    return socketRecvDataPrefix( pCallbackContext, pLine, lineLength, ppDataStart, pDataLength, false);
+}
+static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
+                                                 char * pLine,
+                                                 uint32_t lineLength,
+                                                 char ** ppDataStart,
+                                                 uint32_t * pDataLength,
+                                                 bool useSsl )
 {
     char * pDataStart = NULL;
     uint32_t prefixLineLength = 0U;
@@ -1713,8 +1807,11 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
     CellularATError_t atResult = CELLULAR_AT_SUCCESS;
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
     uint32_t i = 0;
-    char pLocalLine[ MAX_QIRD_STRING_PREFIX_STRING + 1 ] = "\0";
-    uint32_t localLineLength = MAX_QIRD_STRING_PREFIX_STRING > lineLength ? lineLength : MAX_QIRD_STRING_PREFIX_STRING;
+    uint8_t commandPrefixStringLength = useSsl ? MAX_QSSLRECV_STRING_PREFIX_STRING : MAX_QIRD_STRING_PREFIX_STRING;
+    uint8_t sslDataPrefixStringLength = useSsl ? SSL_DATA_PREFIX_STRING_LENGTH : DATA_PREFIX_STRING_LENGTH;
+    char pLocalLine[ commandPrefixStringLength + 1 ];
+    strcpy(pLocalLine, "\0"); 
+    uint32_t localLineLength = commandPrefixStringLength > lineLength ? lineLength : commandPrefixStringLength;
 
     ( void ) pCallbackContext;
 
@@ -1725,10 +1822,10 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
     else
     {
         /* Check if the message is a data response. */
-        if( strncmp( pLine, DATA_PREFIX_STRING, DATA_PREFIX_STRING_LENGTH ) == 0 )
+        if( strncmp( pLine, (useSsl ? SSL_DATA_PREFIX_STRING : DATA_PREFIX_STRING), sslDataPrefixStringLength) == 0 )
         {
-            strncpy( pLocalLine, pLine, MAX_QIRD_STRING_PREFIX_STRING );
-            pLocalLine[ MAX_QIRD_STRING_PREFIX_STRING ] = '\0';
+            strncpy( pLocalLine, pLine, commandPrefixStringLength );
+            pLocalLine[ commandPrefixStringLength ] = '\0';
             pDataStart = pLocalLine;
 
             /* Add a '\0' char at the end of the line. */
@@ -1751,7 +1848,7 @@ static CellularPktStatus_t socketRecvDataPrefix( void * pCallbackContext,
 
         if( pDataStart != NULL )
         {
-            atResult = Cellular_ATStrtoi( &pDataStart[ DATA_PREFIX_STRING_LENGTH ], 10, &tempValue );
+            atResult = Cellular_ATStrtoi( &pDataStart[ sslDataPrefixStringLength ], 10, &tempValue );
 
             if( ( atResult == CELLULAR_AT_SUCCESS ) && ( tempValue >= 0 ) &&
                 ( tempValue <= ( int32_t ) CELLULAR_MAX_RECV_DATA_LEN ) )
@@ -2223,6 +2320,34 @@ static CellularPktStatus_t socketSendDataPrefix( void * pCallbackContext,
     return pktStatus;
 }
 
+static CellularPktStatus_t fileUploadInFileSystem( void * pCallbackContext,
+                                                   char * pLine,
+                                                   uint32_t * pBytesRead )
+{
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    if( ( pLine == NULL ) || ( pBytesRead == NULL )  || ( pCallbackContext != NULL ) )
+    {
+        LogError( ( "fileUploadInFileSystem: NULL parameter" ) );
+        pktStatus = CELLULAR_PKT_STATUS_BAD_PARAM;
+    }
+    else if( *pBytesRead != 9U )
+    {
+        LogError( ( "fileUploadInFileSystem: pBytesRead %u %s is not 8", *pBytesRead, pLine ) );
+        pktStatus = CELLULAR_PKT_STATUS_INVALID_DATA;
+    }
+    else
+    {
+        /* After the data prefix, there should not be any data in stream.
+         * Cellular commmon processes AT command in lines. Add a '\0' after 'CONNECT'. */
+        if( strcmp( pLine, "CONNECT " ) == 0 )
+        {
+            pLine[ 1 ] = '\n';
+        }
+    }
+
+    return pktStatus;
+}
+
 /*-----------------------------------------------------------*/
 
 /* FreeRTOS Cellular Library API. */
@@ -2531,6 +2656,8 @@ CellularError_t Cellular_SocketRecv( CellularHandle_t cellularHandle,
     char cmdBuf[ CELLULAR_AT_CMD_TYPICAL_MAX_SIZE ] = { '\0' };
     uint32_t recvTimeout = DATA_READ_TIMEOUT_MS;
     uint32_t recvLen = bufferLength;
+    bool useSsl = (socketHandle->sslConfig.useSsl == 1);
+
     _socketDataRecv_t dataRecv =
     {
         pReceivedDataLength,
@@ -2541,7 +2668,7 @@ CellularError_t Cellular_SocketRecv( CellularHandle_t cellularHandle,
     {
         cmdBuf,
         CELLULAR_AT_MULTI_DATA_WO_PREFIX,
-        "+QIRD",
+        (useSsl ?  "+QSSLRECV" : "+QIRD"),
         _Cellular_RecvFuncData,
         ( void * ) &dataRecv,
         bufferLength,
@@ -2597,9 +2724,19 @@ CellularError_t Cellular_SocketRecv( CellularHandle_t cellularHandle,
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE,
-                           "%s%ld,%ld", "AT+QIRD=", socketHandle->socketId, recvLen );
+                           "%s%ld,%ld", (useSsl ?  "AT+QSSLRECV=" : "AT+QIRD="), socketHandle->socketId, recvLen );
+        
+        CellularATCommandDataPrefixCallback_t callback;
+
+        if(useSsl){   
+            callback = socketRecvDataPrefixSsl;     
+
+        }else{
+            callback = socketRecvDataPrefixNonSsl;
+        }
+
         pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
-                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefix, NULL );
+                                                                       atReqSocketRecv, recvTimeout, callback, NULL );
 
         if( pktStatus != CELLULAR_PKT_STATUS_OK )
         {
@@ -2629,6 +2766,7 @@ CellularError_t Cellular_SocketSend( CellularHandle_t cellularHandle,
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
     uint32_t sendTimeout = DATA_SEND_TIMEOUT_MS;
     char cmdBuf[ CELLULAR_AT_CMD_TYPICAL_MAX_SIZE ] = { '\0' };
+
     CellularAtReq_t atReqSocketSend =
     {
         cmdBuf,
@@ -2693,12 +2831,20 @@ CellularError_t Cellular_SocketSend( CellularHandle_t cellularHandle,
         }
 
         /* Form the AT command. */
-
+        const char* socketSendATCommand;
+        if(socketHandle->sslConfig.useSsl == 1)
+        {
+            socketSendATCommand = "AT+QSSLSEND=";
+        }else
+        {
+            socketSendATCommand = "AT+QISEND=";
+        }
         /* The return value of snprintf is not used.
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%ld,%ld",
-                           "AT+QISEND=", socketHandle->socketId, atDataReqSocketSend.dataLen );
+                           socketSendATCommand, socketHandle->socketId, atDataReqSocketSend.dataLen );
+
 
         pktStatus = _Cellular_AtcmdDataSend( pContext, atReqSocketSend, atDataReqSocketSend,
                                              socketSendDataPrefix, NULL,
@@ -2725,6 +2871,7 @@ CellularError_t Cellular_SocketClose( CellularHandle_t cellularHandle,
     CellularError_t cellularStatus = CELLULAR_SUCCESS;
     CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
     char cmdBuf[ CELLULAR_AT_CMD_TYPICAL_MAX_SIZE ] = { '\0' };
+
     CellularAtReq_t atReqSockClose =
     {
         cmdBuf,
@@ -2762,7 +2909,7 @@ CellularError_t Cellular_SocketClose( CellularHandle_t cellularHandle,
             /* The return value of snprintf is not used.
              * The max length of the string is fixed and checked offline. */
             /* coverity[misra_c_2012_rule_21_6_violation]. */
-            ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%ld", "AT+QICLOSE=", socketHandle->socketId );
+            ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%ld", ((socketHandle->sslConfig.useSsl == 1) ? "AT+QSSLCLOSE=" : "AT+QICLOSE="), socketHandle->socketId );
             pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback( pContext, atReqSockClose,
                                                                    SOCKET_DISCONNECT_PACKET_REQ_TIMEOUT_MS );
 
@@ -2853,7 +3000,6 @@ CellularError_t Cellular_SocketConnect( CellularHandle_t cellularHandle,
             socketHandle->socketState = SOCKETSTATE_ALLOCATED;
         }
     }
-
     return cellularStatus;
 }
 
@@ -3195,6 +3341,61 @@ CellularError_t Cellular_GetHostByName( CellularHandle_t cellularHandle,
     return cellularStatus;
 }
 
+CellularError_t Cellular_UploadFileToStorage(CellularHandle_t cellularHandle, const char* filename, const char* fileContent, uint32_t fileSize, uint32_t* pSentDataLength)
+{
+    CellularContext_t* pContext = (CellularContext_t*)cellularHandle;
+    CellularError_t cellularStatus = CELLULAR_SUCCESS;
+    CellularPktStatus_t pktStatus = CELLULAR_PKT_STATUS_OK;
+    uint32_t sendTimeout = DATA_SEND_TIMEOUT_MS;
+    char cmdBuf[CELLULAR_AT_CMD_TYPICAL_MAX_SIZE] = {'\0'};
+
+    CellularAtReq_t atReqUploadFile = {
+        cmdBuf,
+        CELLULAR_AT_NO_RESULT,
+        NULL,
+        NULL,
+        NULL,
+        0,
+    };
+
+    CellularAtDataReq_t atDataUploadFile =
+    {
+        fileContent,
+        fileSize,
+        pSentDataLength,
+        NULL,
+        0
+    };
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Make sure the library is open. */
+        cellularStatus = _Cellular_CheckLibraryStatus(pContext);
+    }
+
+    if (cellularStatus == CELLULAR_SUCCESS)
+    {
+        /* Form the AT command. */
+
+        /* The return value of snprintf is not used.
+         * The max length of the string is fixed and checked offline. */
+        /* coverity[misra_c_2012_rule_21_6_violation]. */
+        (void)snprintf(cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%s,%d", "AT+QFUPL=", filename, fileSize);
+
+        pktStatus = _Cellular_AtcmdDataSend( pContext, atReqUploadFile, atDataUploadFile,
+                                             fileUploadInFileSystem, NULL,
+                                             PACKET_REQ_TIMEOUT_MS, sendTimeout, 0U );
+          
+        if (pktStatus != CELLULAR_PKT_STATUS_OK)
+        {
+            LogError(("Cellular_UploadFileToStorage: can't upload file: %s, cmdBuf:%s, PktRet: %d", filename, cmdBuf, pktStatus));
+            cellularStatus = _Cellular_TranslatePktStatus(pktStatus);
+        }
+    }
+
+    return cellularStatus;
+}
+
 /*-----------------------------------------------------------*/
 
 CellularError_t Cellular_Init( CellularHandle_t * pCellularHandle,
@@ -3216,5 +3417,4 @@ CellularError_t Cellular_Init( CellularHandle_t * pCellularHandle,
 
     return Cellular_CommonInit( pCellularHandle, pCommInterface, &cellularTokenTable );
 }
-
 /*-----------------------------------------------------------*/

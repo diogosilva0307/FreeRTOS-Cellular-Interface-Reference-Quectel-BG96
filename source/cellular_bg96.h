@@ -26,6 +26,7 @@
 #ifndef __CELLULAR_BG96_H__
 #define __CELLULAR_BG96_H__
 
+#include "cellular_common.h"
 /* *INDENT-OFF* */
 #ifdef __cplusplus
     extern "C" {
@@ -49,6 +50,7 @@
 #define DATA_SEND_TIMEOUT_MS                       ( 50000UL )
 #define DATA_READ_TIMEOUT_MS                       ( 50000UL )
 
+#define REQ_TIMEOUT_MS                             ( 30000UL )
 /**
  * @brief DNS query result.
  */
