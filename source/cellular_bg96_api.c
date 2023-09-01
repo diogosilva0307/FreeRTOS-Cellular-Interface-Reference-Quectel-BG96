@@ -42,7 +42,9 @@
 
 /*-----------------------------------------------------------*/
 
-#define CELLULAR_AT_CMD_TYPICAL_MAX_SIZE           ( 64U )
+#define CELLULAR_AT_CMD_TYPICAL_MAX_SIZE           ( 32U )
+#define CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE        ( 64U )
+
 #define CELLULAR_AT_CMD_QUERY_DNS_MAX_SIZE         ( 280U )
 
 #define SIGNAL_QUALITY_POS_SYSMODE                 ( 1U )
@@ -230,11 +232,6 @@ static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
                                                  char ** ppDataStart,
                                                  uint32_t * pDataLength );
                                                  
-static CellularPktStatus_t socketRecvDataPrefixNonSsl( void * pCallbackContext,
-                                                 char * pLine,
-                                                 uint32_t lineLength,
-                                                 char ** ppDataStart,
-                                                 uint32_t * pDataLength );
 /*-----------------------------------------------------------*/
 
 static bool _parseSignalQuality( char * pQcsqPayload,
@@ -1294,7 +1291,7 @@ CellularError_t Cellular_ConfigureSSLContext(CellularHandle_t cellularHandle,
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         (void)snprintf(
-            cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s\"%s\",%d,%s", "AT+QSSLCFG=", sslConfigurationParameter, sslContextId, inputArg);
+            cmdBuf, CELLULAR_AT_CMD_SSL_CONFIG_MAX_SIZE, "%s\"%s\",%d,%s", "AT+QSSLCFG=", sslConfigurationParameter, sslContextId, inputArg);
         pktStatus = _Cellular_TimeoutAtcmdRequestWithCallback(pContext, atReqConfSSL, REQ_TIMEOUT_MS);
               
 
@@ -2729,13 +2726,17 @@ CellularError_t Cellular_SocketRecv( CellularHandle_t cellularHandle,
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE,
                            "%s%ld,%ld", (useSsl ?  "AT+QSSLRECV=" : "AT+QIRD="), socketHandle->socketId, recvLen );
         
-        if(useSsl){        
-            pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
-                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefixSsl, NULL );
+        CellularATCommandDataPrefixCallback_t callback;
+
+        if(useSsl){   
+            callback = socketRecvDataPrefixSsl;     
+
         }else{
-            pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
-                                                                       atReqSocketRecv, recvTimeout, socketRecvDataPrefixNonSsl, NULL );
+            callback = socketRecvDataPrefixNonSsl;
         }
+
+        pktStatus = _Cellular_TimeoutAtcmdDataRecvRequestWithCallback( pContext,
+                                                                       atReqSocketRecv, recvTimeout, callback, NULL );
 
         if( pktStatus != CELLULAR_PKT_STATUS_OK )
         {
@@ -2830,12 +2831,19 @@ CellularError_t Cellular_SocketSend( CellularHandle_t cellularHandle,
         }
 
         /* Form the AT command. */
-
+        const char* socketSendATCommand;
+        if(socketHandle->sslConfig.useSsl == 1)
+        {
+            socketSendATCommand = "AT+QSSLSEND=";
+        }else
+        {
+            socketSendATCommand = "AT+QISEND=";
+        }
         /* The return value of snprintf is not used.
          * The max length of the string is fixed and checked offline. */
         /* coverity[misra_c_2012_rule_21_6_violation]. */
         ( void ) snprintf( cmdBuf, CELLULAR_AT_CMD_TYPICAL_MAX_SIZE, "%s%ld,%ld",
-                           ((socketHandle->sslConfig.useSsl == 1) ? "AT+QSSLSEND=" : "AT+QISEND="), socketHandle->socketId, atDataReqSocketSend.dataLen );
+                           socketSendATCommand, socketHandle->socketId, atDataReqSocketSend.dataLen );
 
 
         pktStatus = _Cellular_AtcmdDataSend( pContext, atReqSocketSend, atDataReqSocketSend,
@@ -2925,7 +2933,7 @@ CellularError_t Cellular_SocketClose( CellularHandle_t cellularHandle,
 CellularError_t Cellular_SocketConnect( CellularHandle_t cellularHandle,
                                         CellularSocketHandle_t socketHandle,
                                         CellularSocketAccessMode_t dataAccessMode,
-                                        const CellularSocketAddress_t * pRemoteSocketAddress)
+                                        const CellularSocketAddress_t * pRemoteSocketAddress )
 {
     CellularContext_t * pContext = ( CellularContext_t * ) cellularHandle;
     CellularError_t cellularStatus = CELLULAR_SUCCESS;
@@ -2967,8 +2975,6 @@ CellularError_t Cellular_SocketConnect( CellularHandle_t cellularHandle,
     {
         cellularStatus = storeAccessModeAndAddress( pContext, socketHandle, dataAccessMode, pRemoteSocketAddress );
     }
-    LogError( ( "Cellular_SocketConnect: socket Handle %d, %d, %s, %d, %d", socketHandle->contextId, socketHandle->socketId, 
-            socketHandle->remoteSocketAddress.ipAddress.ipAddress, socketHandle->remoteSocketAddress.port, socketHandle->socketState ) );
 
     if( cellularStatus == CELLULAR_SUCCESS )
     {
